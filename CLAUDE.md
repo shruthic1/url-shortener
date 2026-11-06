@@ -37,9 +37,11 @@ reverse proxy) → Express on `127.0.0.1:3000` → DB security group (5432 from 
   EC2 instance role using the AWS SDK. Never in files, env files on the server, or logs.
 - Process management: systemd, app runs as non-root user `app` from `/opt/app`
 - Admin access: SSM Session Manager (no SSH, no port 22, no key pair)
-- CI/CD: GitHub Actions → OIDC (no stored AWS keys) → IAM deploy role → SSM Run Command
-  runs `deploy/deploy.sh <commit SHA>` on the instance → workflow verifies
-  `https://go.shruthic.me/health` returns 200
+- CI/CD: GitHub Actions → least-privilege IAM user (access key in GitHub secrets) →
+  SSM Run Command runs `deploy/deploy.sh <commit SHA>` on the instance → workflow verifies
+  `https://go.shruthic.me/health` returns 200. OIDC was the original design; the free-plan
+  account's organization policy denies creating an OIDC provider, so it is a "before real
+  customers" item.
 
 ## Stack
 
@@ -168,18 +170,19 @@ same settings. It never contains the password, only the Parameter Store name.
 - Trigger: push to `main` (plus `workflow_dispatch`)
 - `concurrency` group so deploys never overlap
 - Job `test`: Postgres service container, `npm ci`, apply schema, `npm test`
-- Job `deploy` (needs `test`): `permissions: id-token: write, contents: read`;
-  `aws-actions/configure-aws-credentials` with `role-to-assume`; `aws ssm send-command`
+- Job `deploy` (needs `test`): `permissions: contents: read`;
+  `aws-actions/configure-aws-credentials` with `aws-access-key-id` and
+  `aws-secret-access-key` from GitHub secrets; `aws ssm send-command`
   with `AWS-RunShellScript` targeting the instance, running `deploy.sh $GITHUB_SHA`;
   wait for completion; print the command output; fail if the command failed; then curl
   `https://go.shruthic.me/health` with retries and fail unless it returns 200
-- Use repository variables (not secrets) for `AWS_ROLE_ARN`, `EC2_INSTANCE_ID`, `AWS_REGION`
+- Repository variables (not secrets) for `EC2_INSTANCE_ID` and `AWS_REGION`; repository
+  secrets for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (the IAM user's only key)
 - Pin third-party actions to version tags
 
 Also write, in `infra/`, the IAM documents for me to apply by hand:
-- `github-oidc-trust-policy.json`: trust the GitHub OIDC provider; require
-  `aud = sts.amazonaws.com` and `sub = repo:<OWNER>/<REPO>:ref:refs/heads/main`
-- `github-deploy-permissions.json`: `ssm:SendCommand` on only the instance ARN and the
+- `github-deploy-permissions.json`: attached to the IAM user `url-shortener-github-deploy`;
+  `ssm:SendCommand` on only the instance ARN and the
   `AWS-RunShellScript` document; `ssm:GetCommandInvocation` and
   `ssm:ListCommandInvocations`
 - `ec2-instance-parameter-policy.json`: `ssm:GetParameter` on only

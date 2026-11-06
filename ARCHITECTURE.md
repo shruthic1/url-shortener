@@ -50,7 +50,7 @@ deployed, then checked against the live health endpoint.
 flowchart LR
     Dev[git push main] --> GH[GitHub Actions]
     GH -->|job: test| PGC[(Postgres service container)]
-    GH -->|OIDC, no stored keys| IAM[IAM deploy role]
+    GH -->|access key, least-privilege| IAM[IAM deploy user]
     IAM -->|ssm send-command| EC2[EC2 instance]
     EC2 -->|deploy.sh SHA| APP["git checkout SHA<br/>npm ci --omit=dev<br/>node scripts/migrate.js<br/>systemctl restart"]
     GH -->|curl /health, expect 200| APP
@@ -238,18 +238,26 @@ rule breaks whenever my home IP changes.
 
 **Tradeoff accepted:** shell access depends on the SSM agent being healthy.
 
-### Deployment: GitHub Actions + OIDC + SSM Run Command
+### Deployment: GitHub Actions + SSM Run Command
 
 **Chose:** on every push to `main`, tests run against a real Postgres container. If they
-pass, the workflow signs in to AWS with OIDC (short-lived credentials, no stored keys),
-tells SSM to run `deploy.sh` on the instance with the exact commit SHA, waits for it, and
-fails unless `/health` returns `200` afterward. A concurrency group prevents overlapping
-deploys.
+pass, the workflow signs in to AWS as a dedicated IAM user whose only permission is to run
+the shell-script document on this one instance, tells SSM to run `deploy.sh` with the exact
+commit SHA, waits for it, and fails unless `/health` returns `200` afterward. A concurrency
+group prevents overlapping deploys.
 
-**Considered:** SSH-based deploys with a private key stored in GitHub secrets. That needs
-port 22 open to GitHub's constantly changing IP ranges and a long-lived credential.
+**Considered:**
+- *OIDC federation (the original design).* GitHub presents a signed token per run and AWS
+  trades it for credentials that expire within the hour, so nothing is stored in GitHub.
+  This account is a free-plan project under an AWS organization whose policy explicitly
+  denies creating an OIDC identity provider (see [issues encountered](#issues-encountered)),
+  so it is not available here.
+- *SSH-based deploys with a private key in GitHub secrets.* Needs port 22 open to GitHub's
+  constantly changing IP ranges and gives the key full shell access.
 
-**Tradeoff accepted:** a restart means a few seconds of downtime per deploy. There's no
+**Tradeoff accepted:** one long-lived access key exists, stored only in GitHub's encrypted
+secrets. Its blast radius is limited to "run a command on one instance", and it should be
+rotated periodically. A restart also means a few seconds of downtime per deploy; there's no
 blue-green or rolling deploy with a single instance.
 
 ---
@@ -282,18 +290,19 @@ From outside, only nginx on ports 80 and 443 is reachable. Behind it:
 | Identity | Can do | Cannot do |
 |---|---|---|
 | EC2 instance role | Register with SSM; read one parameter (`/url-shortener/db-password`) | Anything else in the account |
-| GitHub deploy role | Send the run-shell-script command to this one instance; read the result | Anything else. It can only be assumed by this repo's `main` branch |
+| GitHub deploy user | Send the run-shell-script command to this one instance; read the result | Anything else. No console access; one access key, held only in GitHub secrets |
 
 ### Secrets
 
 | Secret | Where it lives | Where it never appears |
 |---|---|---|
 | Database password | Parameter Store (encrypted) | Repo, server disk, GitHub, logs |
-| AWS credentials for deploys | None stored; OIDC issues short-lived ones per run | GitHub secrets, repo |
+| Deploy user's access key | GitHub encrypted secrets | Repo, server, logs |
 | TLS private key | On the instance, managed by certbot | Repo |
 
-The GitHub repo stores only three non-secret repository variables: the deploy role's ARN,
-the instance ID, and the region.
+The GitHub repo stores two non-secret repository variables (instance ID and region) and two
+secrets (the deploy user's access key ID and secret). The key can do nothing except run a
+command on the one instance.
 
 ### App-level protections
 
@@ -348,6 +357,34 @@ symptom → what I checked → the actual cause → the fix → what I'd do to p
 One of these becomes the "what went wrong" segment of the demo video.
 -->
 
+**Platform issue: the account cannot use OIDC federation.**
+*Symptom:* the first deploy run failed at the credentials step with "The web identity
+token provided could not be validated". *Checked:* the repository variables (initially
+entered on GitHub's Copilot "Agents" page rather than the Actions page, which was a
+separate, earlier failure), then the IAM identity providers list, which the free-plan
+console does not expose. *Cause:* running `aws iam create-open-id-connect-provider` from
+CloudShell returned an explicit deny from an AWS organization service control policy. Free
+plan "project" accounts are members of an AWS-managed organization, and that policy blocks
+creating OIDC providers, so GitHub can never federate into this account. *Fix:* a dedicated
+IAM user with no console access, one access key, and the same least-privilege deploy policy
+the role would have had; the key lives only in GitHub encrypted secrets. *Prevention:* in a
+standard account, use OIDC as originally designed (item 10 in
+[before real customers](#5-before-real-customers)). Reading the full error text, including
+the policy ARN, is what turned a vague "token could not be validated" into a clear cause.
+
+**Setup issue: the first manual deploy got an empty commit SHA.**
+*Symptom:* `deploy.sh` printed its usage line instead of running. *Cause:* the SHA was
+produced by `git rev-parse` run as root inside `/opt/app`, which is owned by `app`; recent
+git refuses to read a repository owned by another user ("dubious ownership"), so the
+substitution was empty. *Fix:* run `git rev-parse` as the `app` user, which is what the
+script itself already does for every git command. SETUP.md was corrected.
+
+**Setup issue: certbot's renewal timer was installed but not running.**
+*Symptom:* `systemctl list-timers` showed no certbot entry after a successful certificate
+issue. *Cause:* on Amazon Linux 2023 the package installs `certbot-renew.timer` disabled.
+*Fix:* `systemctl enable --now certbot-renew.timer`. Without it the certificate would have
+silently expired after 90 days. SETUP.md was corrected.
+
 **Design issue: migrations couldn't see the database config.**
 `deploy.sh` runs `scripts/migrate.js` outside systemd, so the database settings defined in
 the systemd unit wouldn't exist in that shell, and the migration would fail to connect.
@@ -374,6 +411,8 @@ Each item is a deliberate tradeoff from section 2, ordered by impact:
 7. **Secrets Manager** with automatic password rotation.
 8. **A real migration tool** once the schema needs to change.
 9. **Docker images** built in CI, so the server runs exactly what was tested.
+10. **OIDC federation for deploys** in a standard AWS account, replacing the deploy user's
+    long-lived access key with per-run credentials that expire within the hour.
 
 ---
 
@@ -441,7 +480,10 @@ service container in CI). No mocks. Every route is covered, including the `503` 
 - **IAM role**: an identity with specific permissions that a service or workflow can use,
   instead of a password or key.
 - **OIDC**: a way for GitHub to prove "this is a workflow from this repo" to AWS, in
-  exchange for credentials that expire within the hour.
+  exchange for credentials that expire within the hour. Blocked in this account; see
+  [issues encountered](#issues-encountered).
+- **Service control policy (SCP)**: a rule an AWS organization applies to its member
+  accounts that no user in the account can override, even an administrator.
 - **SSM (Systems Manager)**: an AWS service with an agent on the server, used here to run
   deploy commands, open shell sessions, and store the database password.
 - **nginx**: a web server that sits in front of the app, handling HTTPS and passing

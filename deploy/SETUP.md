@@ -8,14 +8,16 @@ is pinned to that region, so the console has no region switcher.
 Placeholders used in `infra/*.json`: `<ACCOUNT_ID>` (12-digit account ID) and `<INSTANCE_ID>`
 (from step 5). Replace them before pasting.
 
-## 1. GitHub OIDC provider and deploy role (IAM)
+## 1. GitHub deploy identity (IAM)
 
-1. IAM → Identity providers → Add provider → OpenID Connect.
-   Provider URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`.
-2. IAM → Roles → Create role → Custom trust policy → paste
-   `infra/github-oidc-trust-policy.json` (fill in `<ACCOUNT_ID>`). Name it
-   `url-shortener-github-deploy`.
-3. Skip attaching permissions for now; come back after step 5 when the instance ID exists.
+The intended design was an OIDC identity provider plus a role that only this repo's `main`
+branch can assume, so GitHub would hold no AWS credentials at all. The free-plan project
+account sits under an AWS organization policy that explicitly denies
+`iam:CreateOpenIDConnectProvider`, so that is not possible here. The fallback is a dedicated
+IAM user with a single access key and the same least-privilege policy.
+
+1. IAM → IAM users → Create user. Name `url-shortener-github-deploy`, **no** console access.
+2. Skip permissions for now; come back after step 5 when the instance ID exists.
 
 ## 2. Database password (Parameter Store)
 
@@ -57,7 +59,10 @@ Note the endpoint hostname once it is available (`DB_HOST` in step 7).
    Advanced → Credit specification: **Standard**.
 4. Note the instance ID (`i-...`).
 5. Back in IAM: create policy from `infra/github-deploy-permissions.json` (fill in both
-   placeholders), name it `url-shortener-github-deploy`, attach it to the role from step 1.
+   placeholders), name it `url-shortener-github-deploy`, attach it to the IAM user from
+   step 1 (user → Permissions → Add permissions → Attach policies directly).
+6. User → Security credentials → Create access key ("Application running outside AWS").
+   Copy the key ID and secret; the secret is shown once. They go into GitHub in step 8.
 
 ## 6. Elastic IP and DNS
 
@@ -111,15 +116,24 @@ systemctl list-timers | grep certbot        # auto-renewal timer should now be l
 If the first `deploy.sh` fails at step 3, check `journalctl -u url-shortener -n 50`: the
 usual causes are a wrong `DB_HOST`, the DB security group, or the parameter policy.
 
-## 8. GitHub repository variables
+## 8. GitHub repository variables and secrets
 
-Repo → Settings → Secrets and variables → Actions → **Variables** tab (not Secrets):
+Repo → Settings → Secrets and variables → **Actions** (not the Agents page, which is for
+Copilot only).
+
+Variables tab:
 
 | Variable | Value |
 |---|---|
-| `AWS_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/url-shortener-github-deploy` |
 | `EC2_INSTANCE_ID` | `i-...` |
 | `AWS_REGION` | `us-east-2` |
+
+Secrets tab:
+
+| Secret | Value |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | the IAM user's access key ID from step 5 |
+| `AWS_SECRET_ACCESS_KEY` | the IAM user's secret access key |
 
 ## 9. First automated deploy
 
