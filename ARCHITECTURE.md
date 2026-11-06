@@ -32,6 +32,10 @@ When someone opens a short link like `https://go.shruthic.me/aZ3kP9`:
 The database sits behind its own firewall that only accepts connections from the server.
 Nothing else on the internet can reach it.
 
+![Architecture diagram](docs/architecture.svg)
+
+The same request path as a Mermaid flowchart:
+
 ```mermaid
 flowchart LR
     B[Browser] -->|DNS: go.shruthic.me| EIP[Elastic IP]

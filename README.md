@@ -58,6 +58,10 @@ up to 3 times.
 
 ## How it is deployed
 
+![Architecture diagram](docs/architecture.svg)
+
+The same request path as a Mermaid flowchart:
+
 ```mermaid
 flowchart LR
     B[Browser] -->|DNS: go.shruthic.me| EIP[Elastic IP]
