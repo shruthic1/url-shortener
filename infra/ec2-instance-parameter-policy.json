@@ -5,7 +5,7 @@
       "Sid": "ReadDatabasePasswordOnly",
       "Effect": "Allow",
       "Action": "ssm:GetParameter",
-      "Resource": "arn:aws:ssm:us-west-2:<ACCOUNT_ID>:parameter/url-shortener/db-password"
+      "Resource": "arn:aws:ssm:us-east-2:<ACCOUNT_ID>:parameter/url-shortener/db-password"
     }
   ]
 }

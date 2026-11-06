@@ -116,9 +116,12 @@ Route 53, which integrates with AWS but bills monthly per hosted zone.
 
 **Tradeoff accepted:** short links are a few characters longer.
 
-### Region and network: us-west-2, default VPC
+### Region and network: us-east-2, default VPC
 
-**Chose:** Oregon (closest region), and the VPC every AWS account comes with.
+**Chose:** Ohio (us-east-2), because this account uses the AWS Projects console, where each
+project is pinned to one region at creation; and the VPC every AWS account comes with.
+Ohio is free-tier eligible like any other US region, and the extra latency from the west
+coast is tens of milliseconds, which does not matter for a redirect service.
 
 **Considered:** a custom VPC with private subnets for the server. Instances in private
 subnets need a NAT gateway to reach the internet, which has an hourly cost.

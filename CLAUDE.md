@@ -30,7 +30,7 @@ browser → DNS (Namecheap A record `go.shruthic.me` → Elastic IP) → web sec
 reverse proxy) → Express on `127.0.0.1:3000` → DB security group (5432 from web SG only)
 → RDS PostgreSQL (not publicly accessible).
 
-- Region: us-west-2, default VPC
+- Region: us-east-2, default VPC
 - EC2: t3.micro (standard credit mode), Amazon Linux 2023
 - RDS: PostgreSQL, db.t4g.micro, single-AZ, 20 GB, SSL required
 - Secrets: DB password in SSM Parameter Store (SecureString), read at startup via the
@@ -124,7 +124,7 @@ to run repeatedly.
 | `DB_PASSWORD_PARAM` | not set | `/url-shortener/db-password` |
 | `DB_SSL` | false | true |
 | `DB_SSL_CA_PATH` | not set | path to the RDS CA bundle on the instance |
-| `AWS_REGION` | not set | us-west-2 |
+| `AWS_REGION` | not set | us-east-2 |
 
 Password resolution: if `DB_PASSWORD_PARAM` is set, fetch it from Parameter Store with
 decryption at startup; otherwise use `DB_PASSWORD`. Fail fast with a clear error if neither.

@@ -2,7 +2,8 @@
 
 Everything below is done by hand, once, in the AWS console and on the instance. After this,
 every push to `main` deploys automatically. Steps are ordered so each one has what it needs
-from the one before. Region is **us-west-2** throughout.
+from the one before. Region is **us-east-2 (Ohio)** throughout: this account's AWS project
+is pinned to that region, so the console has no region switcher.
 
 Placeholders used in `infra/*.json`: `<ACCOUNT_ID>` (12-digit account ID) and `<INSTANCE_ID>`
 (from step 5). Replace them before pasting.
@@ -38,7 +39,7 @@ Create database → Standard create → PostgreSQL → Free tier template.
 - `db.t4g.micro`, 20 GB gp3, **storage autoscaling off**
 - Default VPC, **Public access: No**, security group `url-shortener-db`
 - Initial database name `urlshortener`
-- Single-AZ, backups on (default 7 days)
+- Single-AZ, backups on with a 1-day retention (the free plan caps it there)
 - Parameter group: default already enforces `rds.force_ssl = 1` on PostgreSQL 15+.
 
 Note the endpoint hostname once it is available (`DB_HOST` in step 7).
@@ -81,7 +82,7 @@ chown -R app:app /opt/app
 # Config directory: RDS CA bundle + non-secret env file
 mkdir -p /etc/url-shortener
 curl -fsSo /etc/url-shortener/rds-ca-bundle.pem \
-  https://truststore.pki.rds.amazonaws.com/us-west-2/us-west-2-bundle.pem
+  https://truststore.pki.rds.amazonaws.com/us-east-2/us-east-2-bundle.pem
 cp /opt/app/deploy/app.env.example /etc/url-shortener/app.env
 vi /etc/url-shortener/app.env          # set DB_HOST to the RDS endpoint
 chown root:app /etc/url-shortener/app.env
@@ -98,12 +99,13 @@ nginx -t
 systemctl enable --now nginx
 
 # First deploy by hand (installs deps, applies schema, starts the service)
-bash /opt/app/deploy/deploy.sh "$(git -C /opt/app rev-parse HEAD)"
+bash /opt/app/deploy/deploy.sh "$(sudo -u app git -C /opt/app rev-parse HEAD)"
 curl -s http://127.0.0.1:3000/health; echo
 
 # TLS (needs DNS from step 6 to resolve and port 80 open)
 certbot --nginx -d go.shruthic.me --redirect -m you@example.com --agree-tos --no-eff-email
-systemctl list-timers | grep certbot     # auto-renewal timer should be present
+systemctl enable --now certbot-renew.timer   # AL2023 installs the timer but does not start it
+systemctl list-timers | grep certbot        # auto-renewal timer should now be listed
 ```
 
 If the first `deploy.sh` fails at step 3, check `journalctl -u url-shortener -n 50`: the
@@ -117,7 +119,7 @@ Repo → Settings → Secrets and variables → Actions → **Variables** tab (n
 |---|---|
 | `AWS_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/url-shortener-github-deploy` |
 | `EC2_INSTANCE_ID` | `i-...` |
-| `AWS_REGION` | `us-west-2` |
+| `AWS_REGION` | `us-east-2` |
 
 ## 9. First automated deploy
 

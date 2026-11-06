@@ -6,8 +6,8 @@
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
       "Resource": [
-        "arn:aws:ec2:us-west-2:<ACCOUNT_ID>:instance/<INSTANCE_ID>",
-        "arn:aws:ssm:us-west-2::document/AWS-RunShellScript"
+        "arn:aws:ec2:us-east-2:<ACCOUNT_ID>:instance/<INSTANCE_ID>",
+        "arn:aws:ssm:us-east-2::document/AWS-RunShellScript"
       ]
     },
     {
