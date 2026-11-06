@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>URL Shortener</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <h1>URL Shortener</h1>
+
+    <form id="shorten-form">
+      <label for="url">Long URL</label>
+      <div class="row">
+        <input id="url" name="url" type="url" placeholder="https://example.com/some/long/path" required autocomplete="off">
+        <button type="submit">Shorten</button>
+      </div>
+      <p id="error" class="error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" hidden>
+      <h2>Your short link</h2>
+      <div class="row">
+        <a id="short-url" target="_blank" rel="noopener"></a>
+        <button id="copy" type="button">Copy</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Recent links</h2>
+      <table id="links">
+        <thead>
+          <tr><th>Short</th><th>Destination</th><th class="num">Clicks</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="empty" class="muted" hidden>No links yet.</p>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

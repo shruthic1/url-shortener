@@ -1,24 +1,29 @@
 {
   "name": "url-shortener",
   "version": "1.0.0",
+  "description": "A simple URL shortener: Express + PostgreSQL, deployed on EC2 behind nginx.",
   "type": "module",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
-    "dev": "node --watch index.js"
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "test": "node --env-file-if-exists=.env --test \"test/*.test.js\""
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/shruthic1/url-shortener.git"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/shruthic1/url-shortener/issues"
-  },
-  "homepage": "https://github.com/shruthic1/url-shortener#readme",
   "dependencies": {
-    "express": "^5.3.0"
+    "@aws-sdk/client-ssm": "^3.1163.0",
+    "express": "^5.3.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
   }
 }

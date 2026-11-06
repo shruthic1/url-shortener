@@ -1,0 +1,38 @@
+# systemd unit for the URL shortener: the single Express process on this instance.
+#
+# Install as root:
+#   install -o root -g root -m 644 url-shortener.service /etc/systemd/system/url-shortener.service
+#   systemctl daemon-reload
+#   systemctl enable --now url-shortener
+#
+# Non-secret configuration comes from /etc/url-shortener/app.env (see app.env.example).
+# The database password is fetched from SSM Parameter Store by the app at startup.
+# Logs go to journald: journalctl -u url-shortener -f
+
+[Unit]
+Description=URL shortener (Express + PostgreSQL)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=app
+Group=app
+WorkingDirectory=/opt/app
+EnvironmentFile=/etc/url-shortener/app.env
+ExecStart=/usr/bin/node src/server.js
+
+# Restart if the process exits with an error; a clean exit (e.g. after SIGTERM) stays stopped.
+Restart=on-failure
+RestartSec=5
+
+# Graceful shutdown: the app drains in-flight requests for up to 10s on SIGTERM.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Basic hardening: the app never needs to gain privileges or share /tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
