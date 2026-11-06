@@ -1,8 +1,7 @@
 # URL Shortener
 
 A small URL shortener (Node.js, Express, PostgreSQL) running on a single Amazon EC2 instance
-behind nginx, with the database on Amazon RDS. Built for a DevOps take-home where the app is
-deliberately simple and the grade is for how well it is deployed and operated.
+behind nginx, with the database on Amazon RDS.
 
 **Live:** https://go.shruthic.me  **Health:** https://go.shruthic.me/health
 
