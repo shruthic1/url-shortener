@@ -87,4 +87,15 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 
+// Short links open in a new tab, so the click count changes while this tab is hidden.
+// Refresh the list whenever the user comes back to it. Both events are needed: Safari
+// does not always fire visibilitychange on a plain tab switch.
+function refreshWhenVisible() {
+  if (document.visibilityState === 'visible') {
+    loadLinks().catch(() => {});
+  }
+}
+document.addEventListener('visibilitychange', refreshWhenVisible);
+window.addEventListener('focus', refreshWhenVisible);
+
 loadLinks().catch(() => {});
